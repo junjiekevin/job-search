@@ -24,7 +24,7 @@ export async function getApplication(jobId: string): Promise<Application | null>
   const userId = await requireUserId(supabase)
   const { data, error } = await supabase.from('applications').select().eq('job_id', jobId).eq('user_id', userId).maybeSingle()
 
-  if (error) throw error
+  if (error) throw new Error(error.message)
   return data ? toApplication(data) : null
 }
 
@@ -35,7 +35,7 @@ export async function listApplications(jobIds: string[]): Promise<Map<string, Ap
   const userId = await requireUserId(supabase)
   const { data, error } = await supabase.from('applications').select().in('job_id', jobIds).eq('user_id', userId)
 
-  if (error) throw error
+  if (error) throw new Error(error.message)
   return new Map(data.map(row => [row.job_id, toApplication(row)]))
 }
 
@@ -57,6 +57,6 @@ export async function saveApplication(input: ApplicationInput): Promise<Applicat
     .select()
     .single()
 
-  if (error) throw error
+  if (error) throw new Error(error.message)
   return toApplication(data)
 }

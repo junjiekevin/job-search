@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { SearchParams } from '@/domains/jobs/types'
 
 interface JobSearchFormProps {
-  onSearch: (params: SearchParams) => Promise<{ ok: true; data: { count: number } } | { ok: false; error: string }>
+  onSearch: (params: SearchParams) => Promise<{ ok: true; data: { count: number; searchKey: string } } | { ok: false; error: string }>
 }
 
 export function JobSearchForm({ onSearch }: JobSearchFormProps): React.JSX.Element {
@@ -32,7 +32,7 @@ export function JobSearchForm({ onSearch }: JobSearchFormProps): React.JSX.Eleme
         setError(result.error)
         return
       }
-      router.refresh()
+      router.push(`/?searchKey=${result.data.searchKey}`)
     })
   }
 

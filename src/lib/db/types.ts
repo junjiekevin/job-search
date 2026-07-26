@@ -35,6 +35,7 @@ export interface Database {
           salary_max: number | null
           salary_currency: string | null
           employment_type: string | null
+          search_key: string | null
           posted_at: string | null
           fetched_at: string
           dedupe_hash: string
@@ -55,6 +56,7 @@ export interface Database {
           salary_max?: number | null
           salary_currency?: string | null
           employment_type?: string | null
+          search_key?: string | null
           posted_at?: string | null
           fetched_at?: string
           dedupe_hash: string
@@ -75,6 +77,7 @@ export interface Database {
           salary_max?: number | null
           salary_currency?: string | null
           employment_type?: string | null
+          search_key?: string | null
           posted_at?: string | null
           fetched_at?: string
           dedupe_hash?: string

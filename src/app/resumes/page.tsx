@@ -1,6 +1,8 @@
+import { AppTabs } from '@/components/app-tabs'
 import { ResumeManager } from '@/components/resume-manager'
 import { listResumes } from '@/domains/resume/db'
 import { uploadResumeAction, setSelectedAction, deleteResumeAction } from './actions'
+import { logout } from '@/app/logout/actions'
 
 export default async function ResumesPage(): Promise<React.JSX.Element> {
   const resumes = await listResumes()
@@ -13,6 +15,10 @@ export default async function ResumesPage(): Promise<React.JSX.Element> {
           Upload up to 3 r&eacute;sum&eacute;s and choose the active one for grading.
         </p>
       </header>
+
+      <section className="mt-6">
+        <AppTabs activeTab="resumes" onLogout={logout} />
+      </section>
 
       <section className="mt-8">
         <ResumeManager

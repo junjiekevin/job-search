@@ -2,22 +2,26 @@
 
 import Link from 'next/link'
 import { useState, useTransition } from 'react'
-import type { Analysis } from '@/domains/analysis/types'
+import type { FeedbackGeneration } from '@/domains/analysis/types'
 
 interface GeneratePanelProps {
   activeResume: { filename: string } | null
   jobId: string
-  onGenerate: (jobId: string) => Promise<GenerateResult>
+  onGenerateResume: (jobId: string) => Promise<GenerateResumeResult>
+  onGenerateCoverLetter: (jobId: string) => Promise<GenerateCoverLetterResult>
+  onGenerateFeedback: (jobId: string) => Promise<GenerateFeedbackResult>
 }
 
-interface GenerationOutput {
-  analysis: Analysis
-  coverLetter: string
-  docxBase64: string
-}
+type GenerateResumeResult =
+  | { ok: true; data: { docxBase64: string } }
+  | { ok: false; error: string }
 
-type GenerateResult =
-  | { ok: true; data: GenerationOutput }
+type GenerateCoverLetterResult =
+  | { ok: true; data: { coverLetter: string } }
+  | { ok: false; error: string }
+
+type GenerateFeedbackResult =
+  | { ok: true; data: FeedbackGeneration }
   | { ok: false; error: string }
 
 function downloadDocx(base64: string): void {
@@ -30,7 +34,7 @@ function downloadDocx(base64: string): void {
   URL.revokeObjectURL(url)
 }
 
-function AnalysisList({ title, values }: { title: string; values: string[] }): React.JSX.Element | null {
+function FeedbackList({ title, values }: { title: string; values: string[] }): React.JSX.Element | null {
   if (values.length === 0) return null
 
   return (
@@ -43,31 +47,88 @@ function AnalysisList({ title, values }: { title: string; values: string[] }): R
   )
 }
 
-function AnalysisAdvice({ analysis }: { analysis: Analysis }): React.JSX.Element {
+function FeedbackCard({ feedback }: { feedback: FeedbackGeneration }): React.JSX.Element {
   return (
     <div className="mt-6 grid gap-5 sm:grid-cols-2">
-      <AnalysisList title="Strong alignment" values={analysis.strongAlignment} />
-      <AnalysisList title="Gaps to address" values={analysis.missingQualifications} />
-      <AnalysisList title="Résumé improvements" values={analysis.resumeImprovements} />
-      <AnalysisList title="Required skills" values={analysis.requiredSkills} />
+      <div className="sm:col-span-2">
+        <p className="text-sm font-medium uppercase tracking-wide text-blue-700">Fit rating</p>
+        <p className="mt-2 text-3xl font-semibold text-gray-950">{feedback.rating}/100</p>
+        <p className="mt-2 text-sm leading-6 text-gray-700">{feedback.rationale}</p>
+      </div>
+      <FeedbackList title="Strengths" values={feedback.strengths} />
+      <FeedbackList title="Gaps" values={feedback.gaps} />
+      <FeedbackList title="Improvements" values={feedback.improvements} />
+      <FeedbackList title="Suggestions" values={feedback.suggestions} />
     </div>
   )
 }
 
-export function GeneratePanel({ activeResume, jobId, onGenerate }: GeneratePanelProps): React.JSX.Element {
-  const [isPending, startTransition] = useTransition()
-  const [error, setError] = useState<string | null>(null)
-  const [output, setOutput] = useState<GenerationOutput | null>(null)
+function ActionButton(
+  { disabled, isPending, label, pendingLabel, onClick }: { disabled: boolean; isPending: boolean; label: string; pendingLabel: string; onClick: () => void }
+): React.JSX.Element {
+  return (
+    <button
+      className="rounded-md bg-blue-700 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+      disabled={disabled || isPending}
+      onClick={onClick}
+      type="button"
+    >
+      {isPending ? pendingLabel : label}
+    </button>
+  )
+}
 
-  function handleGenerate(): void {
-    startTransition(async () => {
-      setError(null)
-      const result = await onGenerate(jobId)
+export function GeneratePanel({
+  activeResume,
+  jobId,
+  onGenerateResume,
+  onGenerateCoverLetter,
+  onGenerateFeedback,
+}: GeneratePanelProps): React.JSX.Element {
+  const isDisabled = !activeResume
+  const [isResumePending, startResumeTransition] = useTransition()
+  const [resumeError, setResumeError] = useState<string | null>(null)
+  const [resumeDocx, setResumeDocx] = useState<string | null>(null)
+  const [isCoverLetterPending, startCoverLetterTransition] = useTransition()
+  const [coverLetterError, setCoverLetterError] = useState<string | null>(null)
+  const [coverLetter, setCoverLetter] = useState<string | null>(null)
+  const [isFeedbackPending, startFeedbackTransition] = useTransition()
+  const [feedbackError, setFeedbackError] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState<FeedbackGeneration | null>(null)
+
+  function handleResume(): void {
+    startResumeTransition(async () => {
+      setResumeError(null)
+      const result = await onGenerateResume(jobId)
       if (!result.ok) {
-        setError(result.error)
+        setResumeError(result.error)
         return
       }
-      setOutput(result.data)
+      setResumeDocx(result.data.docxBase64)
+    })
+  }
+
+  function handleCoverLetter(): void {
+    startCoverLetterTransition(async () => {
+      setCoverLetterError(null)
+      const result = await onGenerateCoverLetter(jobId)
+      if (!result.ok) {
+        setCoverLetterError(result.error)
+        return
+      }
+      setCoverLetter(result.data.coverLetter)
+    })
+  }
+
+  function handleFeedback(): void {
+    startFeedbackTransition(async () => {
+      setFeedbackError(null)
+      const result = await onGenerateFeedback(jobId)
+      if (!result.ok) {
+        setFeedbackError(result.error)
+        return
+      }
+      setFeedback(result.data)
     })
   }
 
@@ -79,24 +140,32 @@ export function GeneratePanel({ activeResume, jobId, onGenerate }: GeneratePanel
       ) : (
         <p className="mt-2 text-sm text-amber-700">Choose an active résumé in <Link className="underline" href="/resumes">My résumés</Link> before generating.</p>
       )}
-      <button
-        className="mt-4 rounded-md bg-blue-700 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
-        disabled={isPending || !activeResume}
-        onClick={handleGenerate}
-        type="button"
-      >
-        {isPending ? 'Generating…' : 'Generate materials'}
-      </button>
-      {error && <p className="mt-3 text-sm text-red-700" role="alert">{error}</p>}
-      {output && (
+      <div className="mt-4 flex flex-wrap gap-3">
+        <ActionButton disabled={isDisabled} isPending={isResumePending} label="Generate résumé" onClick={handleResume} pendingLabel="Generating résumé…" />
+        <ActionButton disabled={isDisabled} isPending={isCoverLetterPending} label="Generate cover letter" onClick={handleCoverLetter} pendingLabel="Generating cover letter…" />
+        <ActionButton disabled={isDisabled} isPending={isFeedbackPending} label="Generate feedback + rating" onClick={handleFeedback} pendingLabel="Generating feedback…" />
+      </div>
+      {resumeError && <p className="mt-3 text-sm text-red-700" role="alert">{resumeError}</p>}
+      {resumeDocx && (
         <div className="mt-6 border-t border-gray-200 pt-5">
-          <h2 className="text-lg font-semibold">Job analysis</h2>
-          <AnalysisAdvice analysis={output.analysis} />
-          <h2 className="mt-6 text-lg font-semibold">Cover letter</h2>
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-700">{output.coverLetter}</p>
-          <button className="mt-5 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50" onClick={() => downloadDocx(output.docxBase64)} type="button">
+          <h2 className="text-lg font-semibold">Tailored résumé</h2>
+          <button className="mt-4 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50" onClick={() => downloadDocx(resumeDocx)} type="button">
             Download tailored résumé (.docx)
           </button>
+        </div>
+      )}
+      {coverLetterError && <p className="mt-3 text-sm text-red-700" role="alert">{coverLetterError}</p>}
+      {coverLetter && (
+        <div className="mt-6 border-t border-gray-200 pt-5">
+          <h2 className="text-lg font-semibold">Cover letter</h2>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-700">{coverLetter}</p>
+        </div>
+      )}
+      {feedbackError && <p className="mt-3 text-sm text-red-700" role="alert">{feedbackError}</p>}
+      {feedback && (
+        <div className="mt-6 border-t border-gray-200 pt-5">
+          <h2 className="text-lg font-semibold">Feedback + rating</h2>
+          <FeedbackCard feedback={feedback} />
         </div>
       )}
     </section>

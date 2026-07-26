@@ -9,6 +9,7 @@ type JobRow = Database['public']['Tables']['jobs']['Row']
 export interface ListJobsOptions {
   search?: string
   sort?: 'newest' | 'oldest'
+  searchKey?: string
 }
 
 function toJob(job: JobRow): Job {
@@ -33,13 +34,26 @@ function sanitizeSearchTerm(value: string): string {
   return value.replace(/[^\p{L}\p{N}\s'-]/gu, ' ').replace(/\s+/g, ' ').trim()
 }
 
+function logDbError(context: string, error: { code?: string; message?: string }): void {
+  console.error(`${context}: ${error.code ?? 'unknown'} ${error.message ?? 'Unknown database error'}`)
+}
+
+function isMissingSearchKeyColumn(error: { code?: string; message?: string }, usedSearchKey: boolean): boolean {
+  if (!usedSearchKey) return false
+
+  return error.code === 'PGRST204'
+    || error.code === '42703'
+    || error.message?.includes('search_key')
+    || false
+}
+
 async function requireUserId(supabase: Awaited<ReturnType<typeof createClient>>): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
   return user.id
 }
 
-export async function upsertJobs(jobs: NormalizedJob[]): Promise<number> {
+export async function upsertJobs(jobs: NormalizedJob[], searchKey?: string): Promise<number> {
   if (jobs.length === 0) return 0
 
   const seen = new Set<string>()
@@ -66,6 +80,7 @@ export async function upsertJobs(jobs: NormalizedJob[]): Promise<number> {
     salary_max: j.salary_max,
     salary_currency: j.salary_currency,
     employment_type: j.employment_type,
+    search_key: searchKey ?? null,
     posted_at: j.posted_at,
     dedupe_hash: j.dedupe_hash,
     fetched_at: new Date().toISOString(),
@@ -75,7 +90,10 @@ export async function upsertJobs(jobs: NormalizedJob[]): Promise<number> {
     .from('jobs')
     .upsert(rows, { onConflict: 'user_id, dedupe_hash', ignoreDuplicates: false })
 
-  if (error) throw error
+  if (error) {
+    logDbError('Jobs upsert failed', error)
+    throw new Error('Could not save job search results.')
+  }
   return rows.length
 }
 
@@ -84,21 +102,37 @@ export async function listJobs(options: ListJobsOptions = {}): Promise<Job[]> {
   const userId = await requireUserId(supabase)
   const search = options.search ? sanitizeSearchTerm(options.search) : undefined
   const sort = options.sort ?? 'newest'
-  let query = supabase.from('jobs').select().eq('user_id', userId)
-
   if (options.search && !search) return []
 
-  if (search) {
-    query = query.or(`title.ilike.%${search}%,company.ilike.%${search}%`)
+  const runQuery = async (includeSearchKey: boolean): Promise<{ data: JobRow[] | null; error: { code?: string; message?: string } | null }> => {
+    let query = supabase.from('jobs').select().eq('user_id', userId)
+
+    if (includeSearchKey && options.searchKey) {
+      query = query.eq('search_key', options.searchKey)
+    }
+
+    if (search) {
+      query = query.or(`title.ilike.%${search}%,company.ilike.%${search}%`)
+    }
+
+    return query.order('posted_at', {
+      ascending: sort === 'oldest',
+      nullsFirst: false,
+    })
   }
 
-  const { data, error } = await query.order('posted_at', {
-    ascending: sort === 'oldest',
-    nullsFirst: false,
-  })
+  let { data, error } = await runQuery(true)
 
-  if (error) throw error
-  return data.map(toJob)
+  if (error && isMissingSearchKeyColumn(error, Boolean(options.searchKey))) {
+    logDbError('Jobs list missing search_key column, retrying without filter', error)
+    ;({ data, error } = await runQuery(false))
+  }
+
+  if (error) {
+    logDbError('Jobs list failed', error)
+    throw new Error('Could not load jobs.')
+  }
+  return (data ?? []).map(toJob)
 }
 
 export async function getJob(id: string): Promise<Job | null> {
@@ -106,7 +140,7 @@ export async function getJob(id: string): Promise<Job | null> {
   const userId = await requireUserId(supabase)
   const { data, error } = await supabase.from('jobs').select().eq('id', id).eq('user_id', userId).maybeSingle()
 
-  if (error) throw error
+  if (error) throw new Error(error.message)
   return data ? toJob(data) : null
 }
 
@@ -142,6 +176,6 @@ export async function createManualJob(
     .select('id')
     .single()
 
-  if (error) throw error
+  if (error) throw new Error(error.message)
   return data.id
 }

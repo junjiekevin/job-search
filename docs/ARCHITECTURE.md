@@ -44,7 +44,7 @@ profiles      id → auth.users (PK), email, created_at
 
 jobs          id, user_id → auth.users, source, external_id, title, company, location,
               description, posting_url, apply_url, salary_min, salary_max, salary_currency,
-              employment_type, posted_at, fetched_at, dedupe_hash   [UNIQUE(user_id, dedupe_hash)]
+              employment_type, search_key, posted_at, fetched_at, dedupe_hash   [UNIQUE(user_id, dedupe_hash)]
 
 applications  id, user_id → auth.users, job_id → jobs, status (saved|applying|applied|
               interview|offer|rejected|archived), notes, updated_at   [UNIQUE(user_id, job_id)]
@@ -63,6 +63,7 @@ Notes:
 - Every table is user-owned; all FKs to `auth.users` are `ON DELETE CASCADE` (deleting an account removes their data). See § Multi-user & RLS.
 - `dedupe_hash` = stable hash of normalized (company, title, location). Dedup is SQL upsert, not AI, and is **per user** — same posting collapses within one user's board. **Manual (pasted-JD) jobs** hash over full content (incl. description) so distinct pastes never falsely collapse.
 - Salary/employment_type are nullable — many listings omit them. Store salary only when the source gives a real figure; never Adzuna's *predicted* salary (README Non-Goal: no salary prediction).
+- `search_key` groups external search results by their normalized `{what, where, country, page}`. Each new search upserts rows with its key; the dashboard filters by the latest key so older results are hidden but preserved. Manual jobs have `search_key = null` and are visible only when no key filter is active.
 - `resumes`: max 3 per user, `is_selected` marks the active résumé; setting one selected clears the user's others (in `db.ts`). Files live under `{uid}/` in the private `resumes` bucket; `extracted_text` cached to avoid re-parsing on each generation.
 - `generations.resume_id` is `ON DELETE SET NULL` so deleting a résumé preserves historical metrics.
 - Historical listings are kept by never deleting from `jobs` (search upserts).
@@ -108,8 +109,7 @@ Deliberate split (user decision 2026-07-25): **inputs are stored, outputs are ep
 - **LLM outputs stay ephemeral.** Analysis, tailored résumé, and cover letter are
   generated, returned to the browser, and discarded server-side. Never written to DB or
   Storage; no output cache — re-running on a mini model is cheaper than storing PII.
-- Generated DOCX is built in memory and returned as base64; the browser turns it into a
-  download. Server keeps no output file.
+- Generated DOCX is built in memory: the LLM emits structured résumé JSON (contact, summary, skills, experience, education), and app code renders it via the `docx` package with deterministic professional formatting. The DOCX is returned as base64; the browser turns it into a download. Server keeps no output file. LLM never emits DOCX, HTML, RTF, or Markdown.
 - **PII that IS at rest** = the résumé files + extracted text only. Guard it: private
   bucket, per-user `{uid}/` path + RLS on `resumes` (§ Multi-user & RLS), delete removes
   both the row and the Storage object.
@@ -119,10 +119,10 @@ Deliberate split (user decision 2026-07-25): **inputs are stored, outputs are ep
 
 ## Core flows
 
-1. **Search jobs**: user enters keyword (+ optional location/country) → Server Action `searchJobs` fans out to enabled search providers in parallel → normalize → upsert by `dedupe_hash`. Dashboard then lists stored jobs (never-deleted history) with local search/sort/filter.
+1. **Search jobs**: user enters keyword (+ optional location/country) → Server Action `searchJobs` computes a stable `search_key` from the normalized params → fans out to enabled search providers in parallel → normalize → upsert by `dedupe_hash` with the `search_key` stamped. Dashboard filters by the latest `search_key` so each search is isolated; removing the key shows the full history with local search/sort/filter.
 2. **Manage résumés**: user uploads a PDF/DOCX (max 3) → `domains/resume` stores the file in the `resumes` bucket, extracts text, writes a `resumes` row → user picks the active one (`is_selected`). Upload of a 4th is blocked until one is deleted; delete removes row + Storage object.
 3. **Paste a job**: user pastes a JD (+ title/company/location) → Server Action saves it as a `jobs` row (`source='manual'`) → lands on its detail page, identical to an aggregated job.
-4. **Generate**: on a job's detail page, the *selected* résumé's text + the job description → `domains/analysis` prompts via `lib/ai` → returns analysis/advice + tailored résumé + cover letter + DOCX (base64) → client downloads → server discards all outputs; writes one `generations` metrics row (job_id, resume_id).
+4. **Generate**: on a job's detail page, the *selected* résumé's text + the job description power three independent actions: tailored résumé, cover letter, and feedback+rating. The résumé action returns structured résumé JSON (contact, summary, skills, experience, education) — the LLM never emits DOCX, HTML, RTF, or Markdown; app code renders the structured content to a deterministic professionally formatted DOCX. The cover letter action returns plain text. The feedback action returns a fit rating, rationale, strengths, gaps, improvements, and concrete rewrite suggestions. Each action calls only its matching `domains/analysis` prompt via `lib/ai`, returns only the requested output, records one `generations` metrics row (`resume`, `cover_letter`, or `analysis`), and the server discards all generated outputs after the response.
 5. **Track status**: Server Action updates `applications.status` / `notes`. Pure CRUD, no AI.
 
 ---

@@ -1,3 +1,4 @@
+import { AppTabs } from '@/components/app-tabs'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { GeneratePanel } from '@/components/generate-panel'
@@ -5,7 +6,8 @@ import { StatusSelect } from '@/components/status-select'
 import { getApplication } from '@/domains/applications/db'
 import { getJob } from '@/domains/jobs/db'
 import { getSelectedResume } from '@/domains/resume/db'
-import { generateJobApplication, saveJobApplication } from './actions'
+import { generateFeedbackAction, generateLetter, generateResume, saveJobApplication } from './actions'
+import { logout } from '@/app/logout/actions'
 
 interface JobDetailPageProps {
   params: Promise<{ id: string }>
@@ -29,7 +31,8 @@ export default async function JobDetailPage({ params }: JobDetailPageProps): Pro
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
-      <Link className="text-sm font-medium text-blue-700 hover:underline" href="/">← All jobs</Link>
+      <AppTabs activeTab="jobs" onLogout={logout} />
+      <Link className="mt-6 inline-block text-sm font-medium text-blue-700 hover:underline" href="/">← All jobs</Link>
       <article className="mt-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -56,7 +59,9 @@ export default async function JobDetailPage({ params }: JobDetailPageProps): Pro
         <GeneratePanel
           activeResume={selectedResume ? { filename: selectedResume.filename } : null}
           jobId={job.id}
-          onGenerate={generateJobApplication}
+          onGenerateCoverLetter={generateLetter}
+          onGenerateFeedback={generateFeedbackAction}
+          onGenerateResume={generateResume}
         />
       </article>
     </main>
