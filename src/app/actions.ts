@@ -5,7 +5,7 @@ import { reed } from '@/domains/jobs/providers/reed'
 import { upsertJobs } from '@/domains/jobs/db'
 import type { SearchParams } from '@/domains/jobs/types'
 
-export async function searchJobs(params: SearchParams): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+export async function searchJobs(params: SearchParams): Promise<{ ok: true; data: { count: number } } | { ok: false; error: string }> {
   const providers = [adzuna, reed]
   const allJobs = await Promise.allSettled(
     providers.map(p => p.search(params))
@@ -23,5 +23,5 @@ export async function searchJobs(params: SearchParams): Promise<{ ok: true; coun
   }
 
   const count = await upsertJobs(jobs)
-  return { ok: true, count }
+  return { ok: true, data: { count } }
 }

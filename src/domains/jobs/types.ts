@@ -25,3 +25,19 @@ export interface NormalizedJob {
   posted_at: string | null
   dedupe_hash: string
 }
+
+export interface Job {
+  id: string
+  source: string
+  title: string
+  company: string
+  location: string | null
+  description: string | null
+  postingUrl: string | null
+  applyUrl: string | null
+  salaryMin: number | null
+  salaryMax: number | null
+  salaryCurrency: string | null
+  employmentType: string | null
+  postedAt: string | null
+}

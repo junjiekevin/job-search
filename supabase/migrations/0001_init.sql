@@ -30,7 +30,7 @@ CREATE TABLE jobs (
 
 CREATE TABLE applications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  job_id uuid NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  job_id uuid NOT NULL UNIQUE REFERENCES jobs(id) ON DELETE CASCADE,
   status application_status NOT NULL DEFAULT 'saved',
   notes text,
   updated_at timestamptz NOT NULL DEFAULT now()
@@ -68,7 +68,6 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
-CREATE INDEX idx_applications_job_id ON applications(job_id);
 CREATE INDEX idx_generations_job_id ON generations(job_id);
 CREATE INDEX idx_generations_resume_id ON generations(resume_id);
 

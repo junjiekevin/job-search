@@ -59,6 +59,7 @@ export interface Database {
           dedupe_hash?: string
           created_at?: string
         }
+        Relationships: []
       }
       applications: {
         Row: {
@@ -82,6 +83,7 @@ export interface Database {
           notes?: string | null
           updated_at?: string
         }
+        Relationships: []
       }
       resumes: {
         Row: {
@@ -111,6 +113,7 @@ export interface Database {
           is_selected?: boolean
           uploaded_at?: string
         }
+        Relationships: []
       }
       generations: {
         Row: {
@@ -146,10 +149,16 @@ export interface Database {
           duration_ms?: number
           created_at?: string
         }
+        Relationships: []
       }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      set_selected_resume: {
+        Args: { p_id: string }
+        Returns: undefined
+      }
+    }
     Enums: {
       application_status: ApplicationStatus
     }

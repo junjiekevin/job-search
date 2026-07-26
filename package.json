@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run"
   },
   "overrides": {
     "postcss": "^8.5.23",
@@ -21,6 +22,7 @@
     "openai": "^6.49.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "unpdf": "^1.8.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -31,6 +33,7 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.2.11",
     "tailwindcss": "^4.3.3",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
   }
 }

@@ -185,9 +185,12 @@ Prioritize:
 -   Low cost
 -   High throughput
 
-Preferred model:
+Preferred models:
 
--   **OpenAI GPT mini** (or another lightweight model)
+-   deepseek/deepseek-v4-flash
+-   google/gemma-4-26b-a4b-it
+-   openai/gpt-5-mini
+
 
 Design the application so the AI provider can be replaced with minimal
 changes.
