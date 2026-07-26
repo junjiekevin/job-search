@@ -1,9 +1,11 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { GeneratePanel } from '@/components/generate-panel'
 import { StatusSelect } from '@/components/status-select'
 import { getApplication } from '@/domains/applications/db'
 import { getJob } from '@/domains/jobs/db'
-import { saveJobApplication } from './actions'
+import { getSelectedResume } from '@/domains/resume/db'
+import { generateJobApplication, saveJobApplication } from './actions'
 
 interface JobDetailPageProps {
   params: Promise<{ id: string }>
@@ -21,7 +23,7 @@ export default async function JobDetailPage({ params }: JobDetailPageProps): Pro
   const { id } = await params
   const job = await getJob(id)
   if (!job) notFound()
-  const application = await getApplication(job.id)
+  const [application, selectedResume] = await Promise.all([getApplication(job.id), getSelectedResume()])
 
   const salary = formatSalary(job.salaryMin, job.salaryMax, job.salaryCurrency)
 
@@ -51,6 +53,11 @@ export default async function JobDetailPage({ params }: JobDetailPageProps): Pro
           <p className="mt-4 whitespace-pre-wrap leading-7 text-gray-700">{job.description ?? 'No description was provided for this listing.'}</p>
         </section>
         <StatusSelect application={application} jobId={job.id} onSave={saveJobApplication} />
+        <GeneratePanel
+          activeResume={selectedResume ? { filename: selectedResume.filename } : null}
+          jobId={job.id}
+          onGenerate={generateJobApplication}
+        />
       </article>
     </main>
   )

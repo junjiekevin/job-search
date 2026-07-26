@@ -35,7 +35,7 @@ export async function complete(
   system: string,
   user: string,
   opts?: { model?: string },
-): Promise<{ content: string; usage: Usage }> {
+): Promise<{ content: string; usage: Usage; model: string }> {
   const openai = getClient()
   const response = await openai.chat.completions.create({
     model: opts?.model ?? PRIMARY_MODEL,
@@ -49,6 +49,7 @@ export async function complete(
   return {
     content: getContent(response),
     usage: getUsage(response),
+    model: response.model,
   }
 }
 
@@ -57,7 +58,7 @@ export async function completeJSON<T>(
   user: string,
   schema: z.ZodType<T>,
   opts?: { model?: string },
-): Promise<{ data: T; usage: Usage }> {
+): Promise<{ data: T; usage: Usage; model: string }> {
   const openai = getClient()
   const response = await openai.chat.completions.create({
     model: opts?.model ?? PRIMARY_MODEL,
@@ -80,5 +81,6 @@ export async function completeJSON<T>(
   return {
     data,
     usage: getUsage(response),
+    model: response.model,
   }
 }

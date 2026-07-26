@@ -18,16 +18,24 @@ function toResume(row: ResumeRow): Resume {
   }
 }
 
+async function requireUserId(supabase: Awaited<ReturnType<typeof createClient>>): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+  return user.id
+}
+
 export async function listResumes(): Promise<Resume[]> {
   const supabase = await createClient()
-  const { data, error } = await supabase.from('resumes').select().order('uploaded_at', { ascending: false })
+  const userId = await requireUserId(supabase)
+  const { data, error } = await supabase.from('resumes').select().eq('user_id', userId).order('uploaded_at', { ascending: false })
   if (error) throw error
   return data.map(toResume)
 }
 
 export async function getSelectedResume(): Promise<Resume | null> {
   const supabase = await createClient()
-  const { data, error } = await supabase.from('resumes').select().eq('is_selected', true).maybeSingle()
+  const userId = await requireUserId(supabase)
+  const { data, error } = await supabase.from('resumes').select().eq('is_selected', true).eq('user_id', userId).maybeSingle()
   if (error) throw error
   return data ? toResume(data) : null
 }
@@ -39,17 +47,19 @@ export async function uploadResume(
   extractedText: string,
 ): Promise<Resume> {
   const supabase = await createClient()
+  const userId = await requireUserId(supabase)
 
   const { count, error: countError } = await supabase
     .from('resumes')
     .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
   if (countError) throw countError
   if (count !== null && count >= 3) {
     throw new Error('Maximum of 3 résumés allowed')
   }
 
   const id = crypto.randomUUID()
-  const storagePath = `${id}/${filename}`
+  const storagePath = `${userId}/${id}/${filename}`
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
     .upload(storagePath, buffer, { contentType: mimeType, upsert: false })
@@ -58,6 +68,7 @@ export async function uploadResume(
   const { data, error: insertError } = await supabase
     .from('resumes')
     .insert({
+      user_id: userId,
       storage_path: storagePath,
       filename,
       mime_type: mimeType,
@@ -75,17 +86,20 @@ export async function uploadResume(
 
 export async function setSelectedResume(id: string): Promise<void> {
   const supabase = await createClient()
+  await requireUserId(supabase)
   const { error } = await supabase.rpc('set_selected_resume', { p_id: id })
   if (error) throw error
 }
 
 export async function deleteResume(id: string): Promise<void> {
   const supabase = await createClient()
+  const userId = await requireUserId(supabase)
 
   const { data: row, error: getError } = await supabase
     .from('resumes')
     .select('storage_path')
     .eq('id', id)
+    .eq('user_id', userId)
     .maybeSingle()
   if (getError) throw getError
   if (!row) return
@@ -99,5 +113,6 @@ export async function deleteResume(id: string): Promise<void> {
     .from('resumes')
     .delete()
     .eq('id', id)
+    .eq('user_id', userId)
   if (deleteError) throw deleteError
 }

@@ -15,12 +15,12 @@ doubt, do the boring thing.
 |---------------|------------------------------------------|-----|
 | App           | Next.js (App Router) + React + TypeScript | Single deployable; SSR dashboard is fast with no client state framework |
 | Backend       | Server Actions (mutations) + Route Handlers (only where a URL is needed) | No separate API layer to maintain |
-| Database      | Supabase Postgres, plain SQL migrations   | 4 tables; SQL is the simplest source of truth |
+| Database      | Supabase Postgres, plain SQL migrations   | 4 tables + profiles; SQL is the simplest source of truth |
 | Data access   | `supabase-js` + generated types — **no ORM** | An ORM is overhead at this scale; typed client is enough |
 | Job sources   | Adzuna (primary) + Reed search APIs; ATS boards later | Keyword+location search = cross-industry, one box, no config. See § Job sources |
-| Storage       | Supabase Storage, private `resumes` bucket | Holds up to 3 uploaded résumé files (PDF/DOCX). RLS-guarded. See § Candidate data policy |
-| Résumé parse  | `mammoth` (DOCX) + a PDF text extractor    | Extract text at upload for grading; cached in `resumes.extracted_text` |
-| Auth          | Supabase Auth, single user                | Middleware guard; no roles, no user management |
+| Storage       | Supabase Storage, private `resumes` bucket | Résumé files (PDF/DOCX) under a per-user `{uid}/` path. RLS-guarded. See § Candidate data policy |
+| Résumé parse  | `mammoth` (DOCX) + `unpdf` (PDF)           | Extract text at upload for grading; cached in `resumes.extracted_text`. unpdf = zero-dep serverless pdf.js |
+| Auth          | Supabase Auth — Google OAuth + email signup | Per-user accounts; every row user-owned, RLS isolates users. See § Multi-user & RLS |
 | AI            | OpenRouter (lightweight model) behind `lib/ai/` | Cheap, fast; provider swappable by editing one file |
 | DOCX          | `docx` npm package, in-memory             | Deterministic output generation; built per request, never stored |
 | Hosting       | Vercel                                    | Zero-config deploys |
@@ -36,31 +36,47 @@ Defined in [CODING.md](CODING.md) — binding for all agents. Summary: DDD-lite.
 
 ---
 
-## Data model (4 tables)
+## Data model (4 tables + profiles)
 
 ```
-jobs          id, source, external_id, title, company, location, description,
-              posting_url, apply_url, salary_min, salary_max, salary_currency,
-              employment_type, posted_at, fetched_at, dedupe_hash (unique)
+profiles      id → auth.users (PK), email, created_at
+              -- one row per signed-up user, auto-created on signup via trigger
 
-applications  id, job_id → jobs, status (saved|applying|applied|interview|offer|rejected|archived),
-              notes, updated_at
+jobs          id, user_id → auth.users, source, external_id, title, company, location,
+              description, posting_url, apply_url, salary_min, salary_max, salary_currency,
+              employment_type, posted_at, fetched_at, dedupe_hash   [UNIQUE(user_id, dedupe_hash)]
 
-resumes       id, storage_path, filename, mime_type, extracted_text, is_selected,
-              uploaded_at
-              -- up to 3 rows (enforced in domains/resume/db.ts); exactly one is_selected
+applications  id, user_id → auth.users, job_id → jobs, status (saved|applying|applied|
+              interview|offer|rejected|archived), notes, updated_at   [UNIQUE(user_id, job_id)]
 
-generations   id, job_id → jobs, resume_id → resumes (SET NULL), kind (analysis|resume|cover_letter),
-              model, prompt_tokens, completion_tokens, duration_ms, created_at
+resumes       id, user_id → auth.users, storage_path, filename, mime_type, extracted_text,
+              is_selected, uploaded_at
+              -- up to 3 rows per user (enforced in domains/resume/db.ts); exactly one is_selected
+
+generations   id, user_id → auth.users, job_id → jobs, resume_id → resumes (SET NULL),
+              kind (analysis|resume|cover_letter), model, prompt_tokens, completion_tokens,
+              duration_ms, created_at
               -- operational metrics + links ONLY: no prompt, no LLM output, no candidate columns
 ```
 
 Notes:
-- `dedupe_hash` = stable hash of normalized (company, title, location). Dedup is SQL upsert, not AI. Same posting from two providers collapses to one row. **Manual (pasted-JD) jobs** hash over full content (incl. description) so distinct pastes never falsely collapse.
+- Every table is user-owned; all FKs to `auth.users` are `ON DELETE CASCADE` (deleting an account removes their data). See § Multi-user & RLS.
+- `dedupe_hash` = stable hash of normalized (company, title, location). Dedup is SQL upsert, not AI, and is **per user** — same posting collapses within one user's board. **Manual (pasted-JD) jobs** hash over full content (incl. description) so distinct pastes never falsely collapse.
 - Salary/employment_type are nullable — many listings omit them. Store salary only when the source gives a real figure; never Adzuna's *predicted* salary (README Non-Goal: no salary prediction).
-- `resumes`: max 3, `is_selected` marks the active résumé used for grading; setting one selected clears the others (in `db.ts`). Files live in the private `resumes` Storage bucket; `extracted_text` cached to avoid re-parsing on each generation.
+- `resumes`: max 3 per user, `is_selected` marks the active résumé; setting one selected clears the user's others (in `db.ts`). Files live under `{uid}/` in the private `resumes` bucket; `extracted_text` cached to avoid re-parsing on each generation.
 - `generations.resume_id` is `ON DELETE SET NULL` so deleting a résumé preserves historical metrics.
 - Historical listings are kept by never deleting from `jobs` (search upserts).
+
+---
+
+## Multi-user & RLS
+
+Google OAuth + email signup; each user sees only their own data.
+
+- Every table (+ `profiles`) has RLS `USING` + `WITH CHECK` `auth.uid() = user_id` (`profiles`: `= id`). RLS is the real boundary — a domain query that forgets to filter still can't leak rows.
+- Domain `db.ts` is defence-in-depth: stamps `user_id` on every write, filters it on every read, using the SSR session client (not the service-role key) so `auth.uid()` is present.
+- Storage: résumé objects live under `{auth.uid()}/...`; the bucket policy checks `(storage.foldername(name))[1] = auth.uid()::text`.
+- `profiles` is auto-populated by a trigger on `auth.users` signup.
 
 ---
 
@@ -95,7 +111,8 @@ Deliberate split (user decision 2026-07-25): **inputs are stored, outputs are ep
 - Generated DOCX is built in memory and returned as base64; the browser turns it into a
   download. Server keeps no output file.
 - **PII that IS at rest** = the résumé files + extracted text only. Guard it: private
-  bucket, RLS on `resumes`, delete removes both the row and the Storage object.
+  bucket, per-user `{uid}/` path + RLS on `resumes` (§ Multi-user & RLS), delete removes
+  both the row and the Storage object.
 - Log discipline: `console.*` is local-debug only and fully stripped pre-ship; never carries secrets, API responses, résumé text, or prompt/output bodies; nothing sensitive ever reaches the browser console. Rules: docs/CODING.md § Logging.
 
 ---
@@ -132,5 +149,5 @@ Per README Non-Goals, plus implementation-level refusals:
 - **New job source** → new file in `domains/jobs/providers/` (search or board archetype per § Job sources).
 - **Follow-companies (ATS boards)** → enable the board providers + a place to store tracked tokens. Designed, deferred.
 - **New AI provider** → edit `lib/ai/client.ts` only.
-- **A few more users later** → add RLS policies keyed on `user_id`; schema gets a `user_id` column then, not now (`resumes` especially — files become per-user).
+- **Roles / teams / sharing** → build on `profiles`; per-user ownership + RLS already in place (§ Multi-user & RLS).
 - **More than 3 résumés / naming / versions** → the cap lives in `domains/resume/db.ts`; raise it or add a label column there without schema churn.

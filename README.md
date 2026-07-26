@@ -245,7 +245,8 @@ The technical lead is responsible for final implementation decisions.
 
 ### Authentication
 
--   Supabase Auth (or an equivalent lightweight solution)
+-   Supabase Auth — Google OAuth sign-in + email/password signup.
+-   Per-user accounts; every row is user-owned and RLS-isolated.
 
 ### Artificial Intelligence
 

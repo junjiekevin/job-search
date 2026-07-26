@@ -1,6 +1,7 @@
 import { JobCard } from '@/components/job-card'
+import { PasteJobForm } from '@/components/paste-job-form'
 import { JobSearchForm } from '@/components/job-search-form'
-import { searchJobs } from '@/app/actions'
+import { createManualJobAction, searchJobs } from '@/app/actions'
 import { APPLICATION_STATUSES, isApplicationStatus, type ApplicationStatus } from '@/domains/applications/types'
 import { listApplications } from '@/domains/applications/db'
 import { listJobs, type ListJobsOptions } from '@/domains/jobs/db'
@@ -34,6 +35,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
       <section className="mt-8 rounded-xl border border-gray-200 bg-gray-50 p-5">
         <JobSearchForm onSearch={searchJobs} />
+      </section>
+
+      <section className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-5">
+        <h2 className="text-xl font-semibold">Paste a job description</h2>
+        <p className="mt-1 text-sm text-gray-600">Save a role you found elsewhere and tailor your application to it.</p>
+        <div className="mt-4">
+          <PasteJobForm onCreate={createManualJobAction} />
+        </div>
       </section>
 
       <section className="mt-10">

@@ -1,9 +1,28 @@
 export interface Database {
   public: {
     Tables: {
+      profiles: {
+        Row: {
+          id: string
+          email: string | null
+          created_at: string
+        }
+        Insert: {
+          id: string
+          email?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string | null
+          created_at?: string
+        }
+        Relationships: [{ foreignKeyName: "profiles_id_fkey", columns: ["id"], referencedRelation: "users", referencedColumns: ["id"] }]
+      }
       jobs: {
         Row: {
           id: string
+          user_id: string
           source: string
           external_id: string
           title: string
@@ -23,6 +42,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          user_id: string
           source: string
           external_id: string
           title: string
@@ -42,6 +62,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          user_id?: string
           source?: string
           external_id?: string
           title?: string
@@ -59,11 +80,12 @@ export interface Database {
           dedupe_hash?: string
           created_at?: string
         }
-        Relationships: []
+        Relationships: [{ foreignKeyName: "jobs_user_id_fkey", columns: ["user_id"], referencedRelation: "users", referencedColumns: ["id"] }]
       }
       applications: {
         Row: {
           id: string
+          user_id: string
           job_id: string
           status: ApplicationStatus
           notes: string | null
@@ -71,6 +93,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          user_id: string
           job_id: string
           status?: ApplicationStatus
           notes?: string | null
@@ -78,16 +101,21 @@ export interface Database {
         }
         Update: {
           id?: string
+          user_id?: string
           job_id?: string
           status?: ApplicationStatus
           notes?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          { foreignKeyName: "applications_user_id_fkey", columns: ["user_id"], referencedRelation: "users", referencedColumns: ["id"] },
+          { foreignKeyName: "applications_job_id_fkey", columns: ["job_id", "user_id"], referencedRelation: "jobs", referencedColumns: ["id", "user_id"] },
+        ]
       }
       resumes: {
         Row: {
           id: string
+          user_id: string
           storage_path: string
           filename: string
           mime_type: string
@@ -97,6 +125,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          user_id: string
           storage_path: string
           filename: string
           mime_type: string
@@ -106,6 +135,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          user_id?: string
           storage_path?: string
           filename?: string
           mime_type?: string
@@ -113,11 +143,12 @@ export interface Database {
           is_selected?: boolean
           uploaded_at?: string
         }
-        Relationships: []
+        Relationships: [{ foreignKeyName: "resumes_user_id_fkey", columns: ["user_id"], referencedRelation: "users", referencedColumns: ["id"] }]
       }
       generations: {
         Row: {
           id: string
+          user_id: string
           job_id: string
           resume_id: string | null
           kind: GenerationKind
@@ -129,6 +160,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          user_id: string
           job_id: string
           resume_id?: string | null
           kind: GenerationKind
@@ -140,6 +172,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          user_id?: string
           job_id?: string
           resume_id?: string | null
           kind?: GenerationKind
@@ -149,7 +182,11 @@ export interface Database {
           duration_ms?: number
           created_at?: string
         }
-        Relationships: []
+        Relationships: [
+          { foreignKeyName: "generations_user_id_fkey", columns: ["user_id"], referencedRelation: "users", referencedColumns: ["id"] },
+          { foreignKeyName: "generations_job_id_fkey", columns: ["job_id", "user_id"], referencedRelation: "jobs", referencedColumns: ["id", "user_id"] },
+          { foreignKeyName: "generations_resume_id_fkey", columns: ["resume_id"], referencedRelation: "resumes", referencedColumns: ["id"] },
+        ]
       }
     }
     Views: Record<string, never>

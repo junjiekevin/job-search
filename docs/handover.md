@@ -43,7 +43,7 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
 **Backlog:** T-011 follow-companies (ATS boards) — after Sprint 2.
 
 ### T-001 supabase-schema
-- status: QA
+- status: DONE
 - owner: qa
 - scope: REVISED again — résumé storage mandate. 4 tables now (jobs, applications, resumes, generations) + private Storage bucket. Adds résumé persistence back.
 - files: supabase/migrations/0001_init.sql, src/lib/db/types.ts
@@ -58,6 +58,7 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
   - src/lib/db/types.ts Database type matches all 4 tables exactly (incl. resumes, resume_id, jobs salary/employment cols)
   - npm run build && npm run lint pass
 - log:
+  - [2026-07-26 qa] PASS → DONE. ✓ 0001 has profiles + jobs/applications/resumes/generations user-owned schema, private resumes bucket, per-user RLS/storage policies, generations metrics-only fields and indexes; ✓ src/lib/db/types.ts matches user_id/profiles/resumes/generations shape. verify: npm run lint pass; npm run build EPERM on .next/trace in sandbox, pass after approved retry.
   - [2026-07-26 reviewer] Approve → QA. QA attack: supabase/migrations/0001_init.sql:39 resumes has storage_path/filename/mime_type/extracted_text/is_selected/uploaded_at only; supabase/migrations/0001_init.sql:52 generations.resume_id FK SET NULL; supabase/migrations/0001_init.sql:61 private resumes bucket created; supabase/migrations/0001_init.sql:85 storage.objects authenticated CRUD limited to bucket_id='resumes'; supabase/migrations/0001_init.sql:75 RLS enabled on jobs/applications/resumes/generations; src/lib/db/types.ts:4 jobs salary/employment columns match SQL; src/lib/db/types.ts:86 resumes type matches SQL; src/lib/db/types.ts:115 generations type includes nullable resume_id and no output fields. verify: npm run lint pass; npm run build hit EPERM on .next/trace in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
   - [2026-07-25 builder] BUILD → rewrite complete. Migration: re-added resumes table (storage_path, filename, mime_type, extracted_text, is_selected), added resume_id to generations (FK → resumes ON DELETE SET NULL), added salary_min/max/currency and employment_type to jobs (nullable), created private storage bucket `resumes` with file_size_limit=5MB and PDF/DOCX only, added storage.objects RLS policy for authenticated CRUD, added idx_generations_resume_id index. types.ts updated to match all 4 tables exactly. Build + lint pass.
   - [2026-07-25 tech_lead] QA → BUILD. Résumé storage mandate: re-add resumes table (files in private Storage bucket + cached extracted_text, is_selected) + generations.resume_id (SET NULL). Outputs still NOT stored. In-place rewrite (0001 uncommitted) — no 0002. Cite: docs/ARCHITECTURE.md § Data model, § Candidate data policy. Note for QA: résumé PII is now at rest — verify RLS on resumes table AND the Storage bucket policy.
@@ -78,7 +79,7 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
   - [2026-07-25 builder] fix: added RLS + authenticated policies to all 4 tables; added explicit SupabaseClient<Database> return types to both factories; added comments justifying ! assertions on env vars. Build + lint pass.
 
 ### T-002 auth-guard
-- status: QA
+- status: DONE
 - owner: qa
 - scope: Supabase Auth, single user (using GCP OAuth - already configured). Route guard + login page. No signup, no roles.
 - files: src/proxy.ts, src/app/login/page.tsx, src/app/login/actions.ts
@@ -88,6 +89,7 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
   - no signup route or UI anywhere
   - npm run build && npm run lint pass
 - log:
+  - [2026-07-26 qa] PASS → DONE. ✓ unauthenticated / redirects to /login via runtime smoke on localhost:3100; ✓ /login reachable 200; ✓ email/password action returns typed ok/error; ✓ no-signup criterion superseded by T-014 auth mandate. verify: npm run lint pass; npm run build pass after .next/trace EPERM retry.
   - [2026-07-25 reviewer] Approve → QA. QA attack: src/proxy.ts:31 unauthenticated / redirects to /login; src/proxy.ts:31 /login remains reachable unauthenticated; src/app/login/actions.ts:13 missing/non-string email/password returns { ok: false, error }; src/app/login/actions.ts:18 valid credentials returns { ok: true }; src/app/login/page.tsx:12 success navigates to /. verify: npm run lint pass; npm run build hit EPERM on .next/trace-build in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
   - [2026-07-25 builder] BUILD → REVIEW. Fixed all 3 rework items: proxy.ts — added explicit Promise<NextResponse> return type + env ! comment; actions.ts — added LoginResult type, runtime type-narrowing on FormData entries (typeof check before cast); page.tsx — added React.JSX.Element return type, narrowed error display with !state.ok guard. Build + lint pass.
   - [2026-07-25 reviewer] Rework. [Major] src/proxy.ts:4 — exported proxy lacks explicit return type; src/proxy.ts:8 and src/proxy.ts:9 use env non-null assertions without a comment → add explicit NextResponse/Promise return type and justify or validate required env vars.
@@ -98,10 +100,10 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
   - [2026-07-25 tech_lead] created. Depends on T-001 (lib/db client factories). Next 16: middleware file is `src/proxy.ts`, not middleware.ts. Session refresh per @supabase/ssr docs.
 
 ### T-003 jobs-search
-- status: QA
+- status: DONE
 - owner: qa
 - scope: jobs domain — Adzuna + Reed search providers, normalize → dedupe_hash → upsert, searchJobs server action. Core search flow per docs/ARCHITECTURE.md § Core flows #1 + § Job sources.
-- files: src/domains/jobs/types.ts, src/domains/jobs/providers/adzuna.ts, src/domains/jobs/providers/reed.ts, src/domains/jobs/normalize.ts, src/domains/jobs/normalize.test.ts, src/domains/jobs/db.ts, src/app/actions.ts
+- files: src/domains/jobs/types.ts, src/domains/jobs/providers/adzuna.ts, src/domains/jobs/providers/reed.ts, src/domains/jobs/normalize.ts, src/domains/jobs/normalize.test.ts, src/domains/jobs/db.ts, src/domains/jobs/db.test.ts, src/app/actions.ts
 - accept:
   - shared SearchProvider shape in types.ts: `search({ what, where?, country?, page? }) => Promise<NormalizedJob[]>`; both providers implement it
   - adzuna.ts: GET https://api.adzuna.com/v1/api/jobs/{country}/search/{page} with app_id+app_key query params (default country 'gb', configurable); Zod-validate response (trust boundary); map redirect_url → posting_url AND apply_url; salary_min/max from response ONLY when salary_is_predicted='0'; salary_currency by country; employment_type from contract_time
@@ -114,6 +116,10 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
   - never logs API keys, request URLs with keys, or raw responses (docs/CODING.md § Logging)
   - npm run build && npm run lint pass
 - log:
+  - [2026-07-26 qa] PASS → DONE. ✓ duplicate cross-provider dedupe_hash rows collapse before one DB upsert; ✓ provider mapping/env/error behavior still covered by normalize tests; ✓ searchJobs returns upsertJobs count. verify: `npx vitest run src/domains/jobs/db.test.ts src/domains/jobs/normalize.test.ts` 15/15 pass; `npm test` 19/19 pass; `npm run lint` pass; `npm run build` hit .next/trace EPERM in sandbox, passed after approved retry.
+  - [2026-07-26 reviewer] Approve → QA. QA attack: src/domains/jobs/db.ts:45 collapses duplicate dedupe_hash values before DB insert mapping; src/domains/jobs/db.ts:55 maps only unique provider rows; src/domains/jobs/db.ts:76 upserts on per-user `user_id, dedupe_hash`; src/domains/jobs/db.test.ts:42 locks same posting from Adzuna+Reed to one upsert row and return count 1; src/app/actions.ts:25 uses upsertJobs result for search count. verify: npm run lint pass; npm run build hit EPERM on .next/trace in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
+  - [2026-07-26 builder] BUILD → REVIEW. Fixed: src/domains/jobs/db.ts:42 — deduplicates NormalizedJob[] by dedupe_hash before mapping to inserts. `npx vitest run src/domains/jobs/db.test.ts` — 1/1 pass. Build + lint + 19/19 tests pass.
+  - [2026-07-26 qa] FAIL → BUILD. ✗ same posting from both sources → 1 row: repro `npx vitest run src/domains/jobs/db.test.ts` fails at src/domains/jobs/db.test.ts:49, expected upsertJobs duplicate dedupe_hash inputs to resolve 1, actual 2; src/domains/jobs/db.ts:48 maps every provider row directly and :69 upserts duplicate `(user_id, dedupe_hash)` rows in one call. Expected collapse duplicates before upsert; actual sends both rows, risking Postgres ON CONFLICT duplicate-row error.
   - [2026-07-26 reviewer] Approve → QA. QA attack: src/app/actions.ts:10 fans out providers with Promise.allSettled; src/app/actions.ts:16 provider failures log message only; src/app/actions.ts:26 returns `{ ok: true, data: { count } }`; src/domains/jobs/providers/adzuna.ts:44 Adzuna country/page URL; src/domains/jobs/providers/adzuna.ts:66 predicted salary excluded unless salary_is_predicted='0'; src/domains/jobs/providers/reed.ts:58 Reed Basic auth header only; src/domains/jobs/providers/reed.ts:74 posting/apply URL from jobId; src/domains/jobs/providers/reed.ts:79 employment_type from Reed flags; src/domains/jobs/db.ts:30 upsert on dedupe_hash without any cast; src/domains/jobs/normalize.ts:4 stable lower/trim hash. verify: npm run lint pass; npm run build hit EPERM on .next/trace-build in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
   - [2026-07-26 builder] BUILD → REVIEW. Fixed both: reed.ts — added fullTime/partTime/contract boolean flags to Zod schema, mapEmploymentType now uses flags first (falls back to contractType/jobType strings); actions.ts — changed return to `{ ok: true, data: { count } }` per CODING.md server-action contract; normalize.test.ts — Reed employment_type test now exercises flag fields. Build + lint + 14/14 tests pass.
   - [2026-07-26 reviewer] Rework. [Major] src/domains/jobs/providers/reed.ts:16 — Reed schema/mapping still ignores the required `fullTime`/`partTime`/`contract` flags and uses `contractType`/`jobType` instead → validate those flag fields and derive employment_type from them; update src/domains/jobs/normalize.test.ts:205 to exercise the flag-based mapping.
@@ -130,7 +136,7 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
   - [2026-07-25 tech_lead] RESCOPED. Remotive placeholder → Adzuna (primary, cross-industry, 19 countries) + Reed (UK). Search model, not fixed feed = one keyword box, no config. Refs: docs/reference/adzuna.json, docs/reference/reed.md. Two archetypes in docs/ARCHITECTURE.md § Job sources; ATS boards deferred → T-011. Depends T-001.
 
 ### T-004 dashboard
-- status: QA
+- status: DONE
 - owner: qa
 - scope: `/` jobs dashboard — one search box (keyword + optional location) fetches new jobs; list, filter, sort, detail view. Server components; state in URL searchParams, no client state lib.
 - files: src/app/page.tsx, src/app/jobs/[id]/page.tsx, src/components/job-search-form.tsx, src/components/job-card.tsx, src/domains/jobs/db.ts, src/domains/jobs/types.ts
@@ -141,6 +147,10 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
   - filters/local-search/sort read from searchParams; `'use client'` only where interactive (the search form)
   - npm run build && npm run lint pass
 - log:
+  - [2026-07-26 qa] PASS → DONE. ✓ search form submits via injected action prop and refreshes on success; ✓ inherited T-003 duplicate-provider defect fixed by db.ts dedupe; ✓ dashboard reads searchParams, filters title/company with sanitized ilike, sorts posted_at newest by default; ✓ detail links render new-tab+noreferrer. verify: `npx vitest run src/domains/jobs/db.test.ts src/domains/jobs/normalize.test.ts` 15/15 pass; `npm test` 19/19 pass; `npm run lint` pass; `npm run build` hit .next/trace EPERM in sandbox, passed after approved retry.
+  - [2026-07-26 reviewer] Approve → QA. QA attack: src/app/page.tsx:37 passes searchJobs into JobSearchForm without component→app import; src/components/job-search-form.tsx:27 invokes the server-action prop and src/components/job-search-form.tsx:35 refreshes dashboard on success; src/domains/jobs/db.ts:45 dedupes same-provider/cross-provider rows before upsert; src/domains/jobs/db.ts:87 filters dashboard rows by user and src/domains/jobs/db.ts:92 applies sanitized title/company ilike filter; src/domains/jobs/db.ts:95 sorts posted_at newest by default; src/app/jobs/[id]/page.tsx:41/:42 external links are new-tab+noreferrer. verify: npm run lint pass; npm run build hit EPERM on .next/trace in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
+  - [2026-07-26 builder] BUILD → REVIEW. T-003 root cause fixed (upsertJobs deduplicates by dedupe_hash). Same fix resolves inherited defect. `npx vitest run src/domains/jobs/db.test.ts` — 1/1 pass. Build + lint + 19/19 tests pass.
+  - [2026-07-26 qa] FAIL → BUILD. ✗ search box fetch/revalidate path inherits T-003 duplicate-provider defect: src/components/job-search-form.tsx:27 calls searchJobs, which can send duplicate dedupe_hash rows through src/domains/jobs/db.ts:48/:69. Repro `npx vitest run src/domains/jobs/db.test.ts`; expected duplicate cross-source listing still yields one dashboard row, actual upsertJobs returns/sends 2.
   - [2026-07-26 reviewer] Approve → QA. QA attack: src/app/page.tsx:31 passes searchJobs into client form without component→app import; src/components/job-search-form.tsx:5 imports domain type only; src/components/job-search-form.tsx:27 invokes action prop and src/components/job-search-form.tsx:35 refreshes on success; src/domains/jobs/db.ts:31 strips PostgREST metacharacters; src/domains/jobs/db.ts:72 all-invalid search returns no rows; src/domains/jobs/db.ts:75 filters title/company ilike; src/domains/jobs/db.ts:78 sorts posted_at default newest; src/app/jobs/[id]/page.tsx:35 external posting/apply links use target blank + noreferrer. verify: npm run lint pass; npm run build hit EPERM on .next/trace in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
   - [2026-07-26 builder] BUILD → REVIEW. src/app/page.tsx:3/:31 injects the T-003 server action as a prop; src/components/job-search-form.tsx:8/:27 accepts and invokes that typed prop, with no app import. src/domains/jobs/db.ts:31 strips PostgREST metacharacters before :75 builds the title/company ilike filter; an all-invalid term returns no rows at :72. Verify: npm run lint; npm run build pass. Risk: build retains unrelated parent package-lock workspace-root warning.
   - [2026-07-26 reviewer] Rework. [Critical] src/components/job-search-form.tsx:5 — shared component imports `@/app/actions`, violating docs/CODING.md dependency direction (`components/` may depend on domain types + lib only, never app) → pass the server action from src/app/page.tsx as a prop or move this action-bound form under app/.
@@ -150,7 +160,7 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
   - [2026-07-25 tech_lead] RESCOPED to search-box model (was Refresh button) per job sources mandate — keyword search is the user-friendly cross-industry entry point. Depends T-003. Keep UI minimal + stylish — README § User Experience; one page + detail, no dialogs.
 
 ### T-005 application-tracking
-- status: QA
+- status: DONE
 - owner: qa
 - scope: applications domain — status + notes CRUD, status control in UI. Pure CRUD, no AI, per docs/ARCHITECTURE.md § Core flows #5.
 - files: supabase/migrations/0001_init.sql, src/domains/applications/types.ts, src/domains/applications/db.ts, src/app/jobs/[id]/actions.ts, src/components/status-select.tsx, src/app/jobs/[id]/page.tsx, src/components/job-card.tsx, src/app/page.tsx
@@ -160,6 +170,7 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
   - current status visible on dashboard list; filter by status via searchParams
   - npm run build && npm run lint pass
 - log:
+  - [2026-07-26 qa] PASS → DONE. ✓ status enum matches SQL; ✓ saveApplication upserts on `(user_id, job_id)` and stamps user_id; ✓ reads filter user_id; ✓ dashboard shows status and filters by searchParams; ✓ detail notes/status persist through saveJobApplication. verify: npm run lint pass; npm run build pass after .next/trace EPERM retry.
   - [2026-07-26 reviewer] Approve → QA. QA attack: supabase/migrations/0001_init.sql:33 applications.job_id is UNIQUE; src/domains/applications/db.ts:36 uses Supabase upsert on job_id; src/app/jobs/[id]/actions.ts:6 narrows unknown input before field access; src/components/status-select.tsx:24 sends jobId/status/notes; src/app/jobs/[id]/page.tsx:24 loads persisted application; src/app/page.tsx:25 filters dashboard by status; src/components/job-card.tsx:40 shows current status. verify: npm run lint pass; npm run build hit EPERM on .next/trace-build in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
   - [2026-07-26 builder] BUILD → REVIEW. supabase/migrations/0001_init.sql:33 enforces unique applications.job_id (the redundant index was removed); src/domains/applications/db.ts:38 upserts atomically on job_id; src/app/jobs/[id]/actions.ts:6/:18 narrows unknown action input before field access inside the handled path. Verify: npm run lint; npm run build pass. Risk: build retains unrelated parent package-lock workspace-root warning.
   - [2026-07-26 reviewer] Rework. [Major] src/domains/applications/db.ts:36 — save is lookup-then-insert/update while supabase/migrations/0001_init.sql:31 has no unique constraint on applications.job_id, so concurrent first saves can create duplicate rows and break getApplication maybeSingle → add a unique constraint/index for job_id (or eventual user_id+job_id per T-014) and use Supabase upsert on that conflict target.
@@ -169,7 +180,7 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
   - [2026-07-25 tech_lead] created. Depends T-001 + T-004.
 
 ### T-006 ai-client
-- status: QA
+- status: DONE
 - owner: qa
 - scope: src/lib/ai/client.ts — the ONLY file importing the LLM SDK. OpenRouter via openai SDK. Generic, domain-agnostic.
 - files: src/lib/ai/client.ts
@@ -183,6 +194,7 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
   - never logs the API key, request bodies, or raw API responses (docs/CODING.md § Logging)
   - npm run build && npm run lint pass
 - log:
+  - [2026-07-26 qa] PASS → DONE. ✓ only src/lib/ai/client.ts imports openai; ✓ OpenRouter baseURL/API key validated at call; ✓ complete/completeJSON return content/data + usage + actual response model; ✓ extra_body.models fallback matches current OpenRouter docs and live catalog includes all 3 configured slugs; ✓ no request/raw-response logging. verify: npm run lint pass; npm run build pass after .next/trace EPERM retry.
   - [2026-07-26 reviewer] Approve → QA. QA attack: src/lib/ai/client.ts:9 validates OPENROUTER_API_KEY at call; src/lib/ai/client.ts:13 uses OpenRouter baseURL; src/lib/ai/client.ts:41 sends primary model and src/lib/ai/client.ts:42 sends fallback `extra_body.models`; src/lib/ai/client.ts:63/:64 mirrors fallback behavior for JSON; src/lib/ai/client.ts:76 throws generic malformed-JSON error with no raw LLM output; src/lib/ai/client.ts:78 Zod-validates parsed output; src/lib/ai/client.ts:27 returns prompt/completion usage. verify: OpenRouter current docs confirm OpenAI SDK fallback via `extra_body.models`; live `/api/v1/models` catalog contains deepseek/deepseek-v4-flash, openai/gpt-5-mini, google/gemma-4-26b-a4b-it. npm run lint pass; npm run build hit EPERM on .next/trace in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
   - [2026-07-26 builder] BUILD → REVIEW. Fixed: src/lib/ai/client.ts:76 — replaced LLM output snippet with generic `'LLM returned malformed JSON'`. Build + lint pass.
   - [2026-07-26 reviewer] Rework. [Major] src/lib/ai/client.ts:76 — invalid-JSON errors include the first 200 chars of raw LLM output in `error.message`; T-007 callers may surface or log that message and expose résumé-derived output, violating docs/CODING.md Logging/AI → throw a generic parse error with no output snippet.
@@ -196,7 +208,7 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
   - [2026-07-25 tech_lead] created. Provider per CODING.md § AI (OpenRouter, `OPENROUTER_API_KEY` — already in .env.example). Model id via env or const in this file; pick a mini-class model (README § Model Requirements).
 
 ### T-007 tailoring-domain
-- status: QA
+- status: DONE
 - owner: qa
 - scope: résumé text extraction + one-call analysis+tailor+cover-letter + in-memory DOCX. Outputs ephemeral per docs/ARCHITECTURE.md § Candidate data policy.
 - files: package.json, package-lock.json, src/domains/resume/parse.ts, src/domains/resume/parse.test.ts, src/domains/resume/build-docx.ts, src/domains/analysis/types.ts, src/domains/analysis/prompts.ts, src/domains/analysis/generate.ts, src/domains/analysis/generate.test.ts
@@ -210,6 +222,9 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
   - tests lock parse output (DOCX + PDF) + generate schema parsing (mock lib/ai)
   - npm run build && npm run lint pass
 - log:
+  - [2026-07-26 qa] PASS → DONE. User supplied missing audit evidence: owner ran `npm audit --omit=dev` and found 0 vulnerabilities; prior QA verified parse/generate/docx, privacy grep, tests, lint/build.
+  - [2026-07-26 owner] DONE. Ran `npm audit --omit=dev` with 0 vulnerabilities.
+  - [2026-07-26 qa] BLOCKED. ✓ parse/generate/docx criteria verified by code + `npm test` before adding T-003 repro (18/18 pass); ✓ no console/db/storage writes for résumé text or LLM outputs under resume/analysis. Could not verify required `npm audit --omit=dev` current result: sandbox run failed audit endpoint/cache-log write, escalation rejected because audit uploads dependency metadata. Need explicit user approval to run audit or tech_lead exception.
   - [2026-07-26 reviewer] Approve → QA. QA attack: src/domains/resume/parse.ts:14 parses PDF/DOCX only; src/domains/resume/parse.ts:21 uses unpdf `getDocumentProxy(new Uint8Array(buffer))` + `extractText(..., { mergePages: true })`; src/domains/resume/parse.ts:9 rejects empty extraction; src/domains/resume/build-docx.ts:3 builds DOCX in memory; src/domains/analysis/prompts.ts:35 prompt JSON shape matches src/domains/analysis/types.ts:14 GenerationSchema; src/domains/analysis/generate.ts:7 makes one completeJSON call; src/domains/analysis/generate.test.ts:27 pins prompt contract; grep verified no console.*, DB, or Storage writes under src/domains/resume or src/domains/analysis. verify: npm run lint pass; npm run build hit EPERM on .next/trace in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
   - [2026-07-26 builder] BUILD → REVIEW. src/domains/analysis/prompts.ts:35 requests exactly the GenerationSchema-compatible `{ analysis, tailoredResume, coverLetter }` JSON object; src/domains/analysis/generate.ts:7 validates it with GenerationSchema; src/domains/analysis/generate.test.ts:27 asserts the prompt contract and schema parsing. Verify: npm test -- src/domains/resume/parse.test.ts src/domains/analysis/generate.test.ts (4/4); npm run lint; npm run build pass. Risk: build retains unrelated parent package-lock workspace-root warning.
   - [2026-07-26 reviewer] Rework. [Major] src/domains/analysis/prompts.ts:35 — prompt asks the LLM to return top-level `fitScore`, `jobRequirements`, `candidateMatch`, `resumeChanges`, etc., but src/domains/analysis/generate.ts:10 validates against src/domains/analysis/types.ts:14 `GenerationSchema` requiring `{ analysis: { primaryResponsibilities, requiredSkills, ... }, tailoredResume, coverLetter }`; real calls will Zod-fail despite the mocked test passing → make prompt JSON shape, GenerationSchema, and src/domains/analysis/generate.test.ts:28 assert the same contract.
@@ -220,17 +235,26 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
   - [2026-07-25 tech_lead] REVISED: parse now handles PDF + DOCX (résumé storage mandate — uploads are PDF/DOCX); dropped .txt/paste-résumé path (résumés come from the library now). Depends T-006. One LLM call returns all three outputs — cheaper and simpler than three; split later only if quality demands it.
 
 ### T-012 resume-library
-- status: REVIEW
-- owner: reviewer
+- status: DONE
+- owner: qa
 - scope: résumé library — upload (PDF/DOCX, max 3) to private Storage, extract+cache text, list, select active, delete. Per docs/ARCHITECTURE.md § Core flows #2.
-- files: src/domains/resume/db.ts, src/domains/resume/types.ts, src/app/resumes/page.tsx, src/app/resumes/actions.ts, src/components/resume-manager.tsx
+- files: supabase/migrations/0004_resumes_single_selected_index.sql, src/domains/resume/db.ts, src/domains/resume/types.ts, src/app/resumes/page.tsx, src/app/resumes/actions.ts, src/components/resume-manager.tsx
 - accept:
-  - db.ts: upload (write file to `resumes` bucket + insert row with parse.ts extracted_text), list, setSelected (clears is_selected on all others in one tx/rpc so exactly one stays selected), delete (removes row AND Storage object). All queries here only
-  - max 3 enforced server-side: 4th upload → { ok: false, error }, not silent overwrite
+  - db.ts: upload (write file to `resumes` bucket under `{auth.uid()}/...` path + insert row with parse.ts extracted_text), list, setSelected (clears is_selected on all others in one tx/rpc so exactly one stays selected), delete (removes row AND Storage object). All queries here only
+  - per T-014: every write stamps user_id; every read + the max-3 count filter by user_id; select/delete scoped to the user's own rows
+  - max 3 enforced server-side (per user): 4th upload → { ok: false, error }, not silent overwrite
   - resume-manager: shows the ≤3 résumés (filename, uploaded_at, selected badge), upload input accepting .pdf/.docx only, select + delete buttons; pending states; actions return { ok } | { ok: false, error }
   - grep-verifiable: extracted_text / résumé bytes never console.* logged
   - npm run build && npm run lint pass
 - log:
+  - [2026-07-26 qa] PASS → DONE. ✓ upload path is `{userId}/{uuid}/{filename}` in private resumes bucket; ✓ max-3 count filters user_id; ✓ insert stamps user_id/extracted_text; ✓ list/get/delete filter user_id; ✓ setSelected uses RPC plus per-user partial unique index in 0001; ✓ UI shows filename/date/Active/select/delete/upload states. verify: npm run lint pass; npm run build pass after .next/trace EPERM retry.
+  - [2026-07-26 reviewer] Approve → QA. QA attack: src/domains/resume/db.ts:43 enforces max 3 server-side before upload; src/domains/resume/db.ts:53 writes bytes to private `resumes` bucket; src/domains/resume/db.ts:58 inserts filename/mime_type/extracted_text row; src/domains/resume/db.ts:78 calls set_selected_resume RPC; supabase/migrations/0003_set_selected_resume_atomic.sql:6 rejects missing p_id and :10 locks selection rows; supabase/migrations/0004_resumes_single_selected_index.sql:1 partial unique index enforces at most one selected row under concurrency; src/domains/resume/db.ts:93 removes Storage object before row delete; src/app/resumes/actions.ts:20 rejects non-PDF/DOCX MIME; src/components/resume-manager.tsx:64 lists uploaded résumés, :71 shows Active badge, :74/:83 select/delete controls, :101 upload input accepts PDF/DOCX. verify: grep no console.* in T-012 files; npm run lint pass; npm run build hit EPERM on .next/trace in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
+  - [2026-07-26 builder] BUILD → REVIEW. Fixed: supabase/migrations/0004_resumes_single_selected_index.sql — partial unique index `ON resumes (is_selected) WHERE is_selected = true` enforces at-most-one selected at the DB level. Combined with the existing RPC (p_id check + FOR UPDATE + atomic UPDATE), concurrent conflicts caught as unique violations. No code changes. Build + lint pass.
+  - [2026-07-26 reviewer] Rework. [Major] supabase/migrations/0003_set_selected_resume_atomic.sql:10 — row locks only cover p_id plus currently-selected rows; when no résumé is selected (initial state or after deleting the selected row), concurrent selects for different p_id values lock different rows and can both commit is_selected=true → add a real DB invariant/serialization point (e.g. partial unique index plus retry/error, advisory/table lock, or equivalent) so every successful set_selected_resume call leaves at most one selected row.
+  - [2026-07-26 reviewer] verify: npm run lint pass; npm run build hit EPERM on .next/trace in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
+  - [2026-07-26 builder] BUILD → REVIEW. Fixed: supabase/migrations/0003_set_selected_resume_atomic.sql — replaces 0002 function with p_id existence check (RAISE if missing) + `PERFORM ... FOR UPDATE` row locking before the atomic UPDATE, so exactly one row is selected after every successful call even under concurrency. No code changes needed (db.ts already calls rpc). Build + lint pass.
+  - [2026-07-26 reviewer] Rework. [Major] supabase/migrations/0002_set_selected_resume.sql:6 — RPC is one statement, but it still does not guarantee exactly one selected résumé: nonexistent p_id clears the current selected row, and concurrent selects can leave multiple selected without a DB invariant → make the function validate/raise when p_id is missing and add an atomic DB-level invariant/locking strategy so exactly one row is selected after every successful call.
+  - [2026-07-26 reviewer] verify: npm run lint pass; npm run build hit EPERM on .next/trace-build in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
   - [2026-07-26 builder] BUILD → REVIEW. Fixed: created supabase/migrations/0002_set_selected_resume.sql — atomic SECURITY DEFINER function using `UPDATE ... SET is_selected = (id = p_id) WHERE id = p_id OR is_selected = true` (single atomic statement). Updated src/lib/db/types.ts:156 — replaced `Record<string, never>` with explicit set_selected_resume function signature. Updated src/domains/resume/db.ts:79 — replaced two-step update with `supabase.rpc('set_selected_resume', { p_id: id })`. Build + lint pass.
   - [2026-07-26 reviewer] Rework. [Major] src/domains/resume/db.ts:79 — setSelectedResume clears all rows and sets the requested row in two separate updates, violating accept's one tx/rpc requirement; a failed second update leaves zero selected and concurrent selects can leave multiple selected → move selection into a single DB transaction/RPC (or equivalent atomic invariant) so exactly one résumé stays selected.
   - [2026-07-26 reviewer] verify: npm run lint pass; npm run build hit EPERM on .next/trace in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
@@ -238,10 +262,10 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
   - [2026-07-25 tech_lead] created. Depends T-007 (parse.ts) + T-001 (resumes table + bucket). Single-user so no user_id yet; RLS + private bucket are the guard. Selected-résumé invariant lives in db.ts, not the UI.
 
 ### T-008 generate-flow
-- status: TODO
-- owner: builder
+- status: DONE
+- owner: qa
 - scope: job-detail generate — grade the SELECTED résumé against the job → render analysis/advice + cover letter, download DOCX. Persists ONE generations metrics row; no outputs stored.
-- files: src/app/jobs/[id]/page.tsx, src/app/jobs/[id]/actions.ts, src/components/generate-panel.tsx, src/domains/analysis/db.ts
+- files: src/app/jobs/[id]/page.tsx, src/app/jobs/[id]/actions.ts, src/components/generate-panel.tsx, src/domains/analysis/db.ts, src/domains/analysis/generate.ts, src/domains/analysis/generate.test.ts, src/lib/ai/client.ts
 - accept:
   - generate-panel: shows the active résumé (link to /resumes to switch/upload if none selected); Generate button; pending state
   - action: load selected résumé's extracted_text (domains/resume/db.ts) + job → generate (T-007) → return { ok, data: { analysis, coverLetter, docxBase64 } }; client converts base64 → blob download; no Storage write, no output at rest
@@ -250,36 +274,62 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
   - grep-verifiable: LLM outputs never passed to any insert/update or console.* call
   - npm run build && npm run lint pass
 - log:
+  - [2026-07-26 qa] PASS → DONE. ✓ GeneratePanel shows active résumé or /resumes prompt and disables without one; ✓ action loads selected extracted_text + job, generates, builds DOCX in memory, records one metrics-only generations row with actual model; ✓ returns analysis/coverLetter/docxBase64 only; ✓ grep found no output DB/Storage write. verify: npm run lint pass; npm run build pass after .next/trace EPERM retry.
+  - [2026-07-26 reviewer] Approve → QA. QA attack: src/app/jobs/[id]/page.tsx:56 renders GeneratePanel with selected résumé filename only; src/components/generate-panel.tsx:77 links to /resumes when selected and :82 disables generate without one; src/app/jobs/[id]/actions.ts:44 loads job + selected résumé, :46 returns no-selected error, :52 calls generateTailoring, :53 builds DOCX in memory, :55 records metrics, :59 persists actual response model, :65 returns analysis/coverLetter/docxBase64 only; src/domains/analysis/db.ts:16 inserts metrics-only generations row; src/lib/ai/client.ts:84 returns response.model; src/domains/analysis/generate.ts:12/:24 carries model through. verify: grep found no generated outputs passed to insert/update/Storage; npm run lint pass; npm run build hit EPERM on .next/trace-build in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
+  - [2026-07-26 builder] BUILD → REVIEW. src/lib/ai/client.ts:50 and :79 return OpenRouter response.model; src/domains/analysis/generate.ts:11 carries it with usage; src/app/jobs/[id]/actions.ts:61 persists generation.model, so fallback metrics are accurate. src/domains/analysis/generate.test.ts:23 locks model propagation. Verify: npm test -- src/domains/analysis/generate.test.ts pass; npm run lint pass; npm run build pass after sandbox EPERM retry. Risk: build retains unrelated parent package-lock workspace-root warning.
+  - [2026-07-26 reviewer] Rework. [Major] src/app/jobs/[id]/actions.ts:61 — generations.model is persisted from local DEFAULT_MODEL, but src/lib/ai/client.ts can transparently use OpenRouter fallbacks, so the only stored model metric is wrong whenever fallback is used → carry the actual response model through generateTailoring/completeJSON and persist that model value.
+  - [2026-07-26 reviewer] verify: grep found no generated outputs passed to insert/update/Storage; npm run lint pass; npm run build hit EPERM on .next/trace-build in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
+  - [2026-07-26 builder] BUILD → REVIEW. src/app/jobs/[id]/page.tsx:57 passes selected filename only to src/components/generate-panel.tsx:67; src/app/jobs/[id]/actions.ts:44 loads selected extracted_text + job, calls generation, builds in-memory DOCX, then src/domains/analysis/db.ts:13 inserts one analysis metrics row only. src/components/generate-panel.tsx:21 converts returned base64 to a browser DOCX download; :86 renders advice + cover letter. src/domains/analysis/generate.ts:9 preserves prompt/completion usage for metrics; test updated. Privacy: no LLM output passed to insert/update/Storage/console. Verify: npm run lint pass; npm run build pass after sandbox EPERM retry. Risk: build retains unrelated parent package-lock workspace-root warning.
   - [2026-07-25 tech_lead] created. Depends T-004 + T-007 + T-012. Base64-through-action fine at résumé scale (<1 MB). Résumé now comes from the library (selected), not a per-request upload.
 
 ### T-014 auth-oauth-signup-db
-- status: BLOCKED
-- owner: tech_lead
-- scope: Google OAuth sign-in + signup page + DB user ownership/RLS so multiple signed-up users cannot see or mutate each other's data.
+- status: DONE
+- owner: qa
+- scope: Google OAuth sign-in + signup page + DB user ownership/RLS so multiple signed-up users cannot see or mutate each other's data. One atomic ticket (auth + isolation = one security boundary).
 - files: supabase/migrations/0001_init.sql, src/lib/db/types.ts, src/app/login/page.tsx, src/app/login/actions.ts, src/app/signup/page.tsx, src/app/signup/actions.ts, src/app/auth/callback/route.ts, src/domains/jobs/db.ts, src/domains/resume/db.ts, src/domains/analysis/db.ts, src/domains/applications/db.ts
 - accept:
-  - login page offers Google OAuth sign-in; callback route exchanges OAuth code server-side and redirects to /
-  - signup page exists for email+password signup, returns `{ ok, data } | { ok: false, error }`, no secrets or raw auth responses logged
-  - schema has public profiles table keyed to auth.users plus user_id ownership on jobs/applications/resumes/generations; jobs dedupe unique per user, not globally
-  - all table RLS restricts reads/writes to auth.uid() = user_id; Storage resumes policy restricts objects to the authenticated user's path only
-  - all domain db writes stamp the current authenticated user_id server-side; all reads filter by user_id
-  - T-002 "No signup" is obsolete; npm run build && npm run lint pass
+  - login page: Google OAuth sign-in button (Google mark = inline SVG, NO icon lib) alongside existing email/password; src/app/auth/callback/route.ts exchanges the OAuth code server-side (exchangeCodeForSession) → redirect /
+  - signup page (src/app/signup/page.tsx + actions.ts): email+password via supabase.auth.signUp, returns `{ ok, data } | { ok: false, error }`; no secrets or raw auth responses logged (docs/CODING.md § Logging)
+  - NO framer-motion, NO lucide-react (tech_lead ruling — see log); any motion via CSS transitions
+  - schema amend 0001 in place (still uncommitted, no 0002): public.profiles (id uuid PK → auth.users(id) ON DELETE CASCADE, email, created_at) + trigger inserting a profile row on auth.users signup
+  - user_id uuid NOT NULL → auth.users(id) ON DELETE CASCADE on jobs, applications, resumes, generations
+  - jobs unique becomes UNIQUE(user_id, dedupe_hash); applications becomes UNIQUE(user_id, job_id) — replaces the global-unique variants (per-user dedupe + closes the T-005 conflict-target note)
+  - RLS on all 4 tables + profiles: USING + WITH CHECK auth.uid() = user_id (profiles: auth.uid() = id) — replaces the T-001 authenticated_all policies
+  - Storage: résumé objects keyed under `{auth.uid()}/...`; bucket policy checks (storage.foldername(name))[1] = auth.uid()::text (replaces bucket-wide authenticated CRUD)
+  - all 4 domain db.ts (verified present): every write stamps user_id server-side; every read filters user_id; jobs upsert conflict → (user_id, dedupe_hash); applications upsert conflict → (user_id, job_id)
+  - src/lib/db/types.ts updated for user_id + profiles
+  - T-002 "No signup" obsolete; npm run build && npm run lint pass
 - log:
+  - [2026-07-26 qa] PASS → DONE. ✓ login has Google OAuth inline SVG + email/password; ✓ callback exchanges code and sets cookies on redirect response; ✓ signup action uses signUp and typed ok/data/error; ✓ no framer-motion/lucide-react deps in source/package; ✓ 0001 has profiles trigger, user_id ownership, per-user unique constraints, RLS/storage path policy, same-owner job/resume safeguards; ✓ all 4 domain db.ts stamp/filter user_id. verify: /login 200 and / redirects to /login on localhost:3100; npm run lint pass; npm run build pass after .next/trace EPERM retry.
+  - [2026-07-26 reviewer] Approve → QA. QA attack: src/app/login/page.tsx:19 starts Google OAuth with `/auth/callback`; src/app/auth/callback/route.ts:9 returns the redirect response that receives Supabase cookies at :21/:22 and :28 exchanges the code; src/app/signup/actions.ts:22 calls `auth.signUp` and :28 returns `{ ok, data }`; supabase/migrations/0001_init.sql:11 creates profiles and :17 creates the signup trigger; :36/:60/:71/:84 add user ownership, :53/:65 make dedupe/application uniqueness per-user, :66/:93 enforce same-owner job references, :112/:118 enforce same-owner generation resume references, :106 keeps selected résumé per-user, :154/:158/:162/:166/:170 and :174 enforce table/storage RLS; src/domains/jobs/db.ts:49/:69/:80/:100/:123/:134 stamp/filter/upsert by user; src/domains/resume/db.ts:30/:38/:55/:62/:71/:102/:116 scope reads, storage, writes, deletes; src/domains/applications/db.ts:25/:36/:49/:55 scope reads and per-user upsert; src/domains/analysis/db.ts:16/:20 stamps generation metrics; src/lib/db/types.ts:4/:25/:88/:118/:151 and :112/:187 reflect profile/user/composite-job typing. verify: npm run lint pass; npm run build hit EPERM on .next/trace-build in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
+  - [2026-07-26 builder] BUILD → REVIEW. Fixed new rework items: (1) supabase/migrations/0001_init.sql — added trigger `check_generation_resume_owner` that rejects generations rows where resume_id references a resume owned by a different user (kept simple FK for ON DELETE SET NULL); (2) src/app/auth/callback/route.ts — added `// env vars set at build/deploy time via Vercel/.env` comment per CODING.md strict TS rule; (3) src/lib/db/types.ts — updated applications + generations job_id relationships to reflect composite FK `(job_id, user_id) → jobs(id, user_id)`. Build + lint + 18 tests pass.
+  - [2026-07-26 reviewer] Rework. [Major] supabase/migrations/0001_init.sql:86 — generations.resume_id still has a single-column FK to resumes(id), so an authenticated client can insert a generations row with their own user_id/job_id but another user's resume_id if known → make resume ownership part of the DB constraint, e.g. composite FK (resume_id, user_id) REFERENCES resumes(id, user_id) ON DELETE SET NULL/MATCH handling or equivalent same-owner enforcement; update src/lib/db/types.ts relationships to match.
+  - [2026-07-26 reviewer] Rework. [Minor] src/app/auth/callback/route.ts:13 — new callback route uses env non-null assertions without the required comment/validation from docs/CODING.md strict TS rule → add the same env assertion comment pattern used in src/proxy.ts or validate before createServerClient.
+  - [2026-07-26 reviewer] verify: npm run lint pass; npm run build hit EPERM on .next/trace-build in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
+  - [2026-07-26 builder] BUILD → REVIEW. Fixed all 3 rework items: (1) src/app/auth/callback/route.ts — creates redirect response first, sets cookies on response via @supabase/ssr pattern; (2) supabase/migrations/0001_init.sql:100 — unique index on `(user_id, is_selected) WHERE is_selected = true`; (3) supabase/migrations/0001_init.sql — composite FKs `(job_id, user_id) REFERENCES jobs(id, user_id)` on applications + generations so child rows enforce same-owner; added `UNIQUE(id, user_id)` on jobs and resumes as FK targets. Build + lint + 18 tests pass.
+  - [2026-07-26 reviewer] Rework. [Major] src/app/auth/callback/route.ts:16 — OAuth exchange writes Supabase cookies only to `request.cookies`, then returns a fresh redirect response at :27 with no `Set-Cookie`, so Google sign-in can exchange the code but lose the session → set cookies on the redirect response returned to the browser using the @supabase/ssr server callback pattern.
+  - [2026-07-26 reviewer] Rework. [Major] supabase/migrations/0001_init.sql:100 — `resumes_single_selected` is globally unique on `is_selected=true`, so once one user has an active résumé every other user is blocked from selecting one → make the selected invariant per-user, e.g. unique on `(user_id, is_selected) WHERE is_selected = true`.
+  - [2026-07-26 reviewer] Rework. [Major] supabase/migrations/0001_init.sql:59 — child rows are scoped by their own `user_id`, but `applications.job_id` and `generations.job_id/resume_id` FKs are not coupled to that same user, so an authenticated client can create own-user rows pointing at another user's job/resume id if known → enforce same-owner relationships with composite FKs/constraints or equivalent DB/domain validation before insert/upsert.
+  - [2026-07-26 reviewer] verify: npm run lint pass; npm run build hit EPERM on .next/trace-build in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
+  - [2026-07-26 tech_lead] UNBLOCK → BUILD. Blocker premise stale: verified on disk all 4 domain db.ts exist (jobs/applications/resume/analysis — built ahead during T-007/T-008), so user_id stamping is concrete, not speculative → stays ONE ticket (splitting auth from isolation = unsafe half-state). Dep ruling: REJECT framer-motion (weight, no need — README lightweight); DEFER lucide-react (inline-SVG Google mark now; adopt an icon lib only on broad need). Schema amended in place (0001 uncommitted, no 0002): user_id + profiles + per-user RLS + per-user Storage path; supersedes T-001 authenticated_all, folds in per-user dedupe (jobs → user_id+dedupe_hash, applications → user_id+job_id, closing T-005 note). user_id folded into T-012 + T-013 accept. SEQUENCING: T-001/T-003/T-005/T-008 sit in QA and touch 0001/db.ts — after T-014, re-QA them against per-user RLS + new conflict targets. Cite: docs/ARCHITECTURE.md § Data model + § Candidate data policy + Stack(Auth).
   - [2026-07-25 builder] BLOCKED — src/domains/resume/db.ts, src/domains/analysis/db.ts, and src/domains/applications/db.ts do not exist, but accept requires every domain DB read/write to scope and stamp user_id. Their behavior belongs to unbuilt T-012/T-008/T-005, so creating ownership wrappers now would be speculative. Need tech_lead to either sequence those tickets first or split T-014 into auth/schema + follow-up domain ownership work. Supplied login-card design can be adapted after scope is unblocked; framer-motion/lucide-react are not installed and adding dependencies requires tech_lead sign-off.
   - [2026-07-26 reviewer] created from user directive during T-004 review. Blocks trusting dashboard/tracking with real signup users until DB ownership/RLS is fixed.
 
 ### T-013 paste-jd
-- status: TODO
-- owner: builder
+- status: DONE
+- owner: qa
 - scope: paste a job description → save as a `source='manual'` job → land on its detail page (reuses T-008 generate). Per docs/ARCHITECTURE.md § Core flows #3.
 - files: src/app/page.tsx, src/app/actions.ts, src/components/paste-job-form.tsx, src/domains/jobs/db.ts
 - accept:
   - paste-job-form: textarea (description) + title + optional company/location; submits to a createManualJob action
-  - action: insert jobs row source='manual', dedupe_hash = hash over full content incl description (distinct pastes never collapse; identical paste dedupes), posting_url/apply_url null; returns new job id; redirect to /jobs/[id]
+  - action: insert jobs row source='manual', stamps user_id (per T-014), dedupe_hash = hash over full content incl description (distinct pastes never collapse; identical paste dedupes per user), posting_url/apply_url null; returns new job id; redirect to /jobs/[id]
   - detail page + generate work identically for manual jobs (no external links shown when null)
   - npm run build && npm run lint pass
 - log:
+  - [2026-07-26 qa] PASS → DONE. ✓ paste form submits title/company/location/description and navigates to returned /jobs/[id]; ✓ action validates title/description; ✓ createManualJob stamps user_id, hashes normalized title/company/location/description, stores source manual with null posting/apply URLs, upserts per-user dedupe and returns id; ✓ detail page hides null external links and keeps GeneratePanel. verify: npm run lint pass; npm run build pass after .next/trace EPERM retry.
+  - [2026-07-26 reviewer] Approve → QA. QA attack: src/components/paste-job-form.tsx:28 posts title/company/location/description and :23 navigates to /jobs/[id] from returned id; src/app/actions.ts:37 rejects missing title/description and :45 delegates to createManualJob; src/domains/jobs/db.ts:96 hashes normalized title/company/location/description, :112 inserts source='manual', :118/:119 store null posting/apply URLs, :122 upserts on dedupe_hash and :123 returns deduped row id; src/app/jobs/[id]/page.tsx:41/:42 hide external buttons when URLs are null and :56 keeps GeneratePanel available for manual jobs. verify: npm run lint pass; npm run build hit EPERM on .next/trace in sandbox, passed after approved escalation; warning: Next inferred C:\Users\leeju as workspace root due outside lockfile.
   - [2026-07-25 tech_lead] created. Depends T-004 + T-008. User chose "save pasted JD as a board job" → manual jobs are first-class, trackable + re-generatable.
+  - [2026-07-26 builder] BUILD → REVIEW. src/components/paste-job-form.tsx:10 posts title, optional company/location, and description; src/app/actions.ts:29 validates then returns the saved id for client navigation to /jobs/[id]. src/domains/jobs/db.ts:96 hashes normalized full content including description; :101 upserts source='manual' with null posting/apply URLs and returns the deduped row id. Existing src/app/jobs/[id]/page.tsx:39 already omits null external links and generates for all jobs. Verify: npm run lint pass; npm run build pass after sandbox EPERM retry. Risk: build retains unrelated parent package-lock workspace-root warning.
 
 ### T-011 follow-companies (ATS boards, deferred)
 - status: TODO
@@ -313,4 +363,15 @@ Coordination point for all agents. Read your ticket + these rules. Nothing else 
 
 _(newest first: `T-### — one-line outcome`)_
 
+- T-004 — Dashboard verified after T-003 dedupe fix: search action prop, URL filters/sort, sanitized title/company ilike, detail external links; tests/lint/build pass (qa, 2026-07-26).
+- T-003 — Jobs search verified after cross-provider dedupe fix; duplicate dedupe_hash rows collapse before upsert; provider mapping tests, lint, build pass (qa, 2026-07-26).
+- T-007 — Tailoring domain unblocked by owner audit result: `npm audit --omit=dev` 0 vulnerabilities; prior parse/generate/docx/privacy checks stand (qa, 2026-07-26).
+- T-014 — Google OAuth/signup + per-user DB/RLS/storage isolation verified; runtime /login 200 and / redirects to /login; build/lint pass (qa, 2026-07-26).
+- T-013 — Paste-JD manual job creation verified with per-user dedupe hash over full content, null external links, and detail/generate compatibility; build/lint pass (qa, 2026-07-26).
+- T-012 — Résumé library verified for per-user private Storage paths, max-3 enforcement, RPC selection invariant, delete/list scoping, and UI states; build/lint pass (qa, 2026-07-26).
+- T-008 — Generate flow verified for selected résumé loading, in-memory DOCX, metrics-only generation row, no output persistence, and no output logging; build/lint pass (qa, 2026-07-26).
+- T-006 — OpenRouter client verified: only OpenAI SDK import, call-time env validation, usage/model return, fallback docs/catalog current, no raw/key logging; build/lint pass (qa, 2026-07-26).
+- T-005 — Application tracking verified for per-user upsert/read filtering, dashboard status visibility/filter, detail notes/status persistence; build/lint pass (qa, 2026-07-26).
+- T-002 — Auth guard/login verified under T-014 supersession: /login public, / redirects to /login, email/password action typed; build/lint pass (qa, 2026-07-26).
+- T-001 — Schema/types verified for 4-table résumé-storage + per-user ownership/RLS/storage policies and metrics-only generations; build/lint pass (qa, 2026-07-26).
 - T-009 — README re-aligned to résumé storage mandate: § Resume Management (up to 3, switch, stored), workflow (library + paste-JD + DOCX output), Storage → private bucket (tech_lead, per user directive 2026-07-25). Supersedes the earlier stateless wording.

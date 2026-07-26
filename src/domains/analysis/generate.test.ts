@@ -20,9 +20,13 @@ const generation = {
 
 describe('generateTailoring', () => {
   it('uses one JSON call with the complete analysis schema', async () => {
-    ai.completeJSON.mockResolvedValueOnce({ data: generation, usage: { prompt_tokens: 1, completion_tokens: 1 } })
+    ai.completeJSON.mockResolvedValueOnce({ data: generation, usage: { prompt_tokens: 1, completion_tokens: 1 }, model: 'openai/gpt-5-mini' })
 
-    await expect(generateTailoring('Résumé facts', job)).resolves.toEqual(generation)
+    await expect(generateTailoring('Résumé facts', job)).resolves.toEqual({
+      ...generation,
+      usage: { promptTokens: 1, completionTokens: 1 },
+      model: 'openai/gpt-5-mini',
+    })
     expect(ai.completeJSON).toHaveBeenCalledTimes(1)
     const prompt = ai.completeJSON.mock.calls[0][1]
     expect(prompt).toContain('"analysis"')
