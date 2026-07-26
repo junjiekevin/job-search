@@ -202,6 +202,29 @@ describe('reed.search', () => {
     expect(jobs[0].apply_url).toBe('https://www.reed.co.uk/jobs/123456')
   })
 
+  it('accepts search results without descriptions', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        results: [{
+          jobId: 123456,
+          employerName: 'Acme',
+          jobTitle: 'Engineer',
+          locationName: 'London',
+          minimumSalary: null,
+          maximumSalary: null,
+          currency: null,
+          contractType: null,
+          jobType: null,
+        }],
+      }),
+    })
+
+    const jobs = await reed.search({ what: 'engineer' })
+    expect(jobs[0].source).toBe('reed')
+    expect(jobs[0].description).toBeNull()
+  })
+
   it('maps employment_type from flag fields', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
